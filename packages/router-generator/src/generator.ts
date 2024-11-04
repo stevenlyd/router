@@ -16,10 +16,13 @@ import {
   trimPathLeft,
   writeIfDifferent,
 } from './utils'
-import { getRouteNodes as physicalGetRouteNodes } from './filesystem/physical/getRouteNodes'
-import { getRouteNodes as virtualGetRouteNodes } from './filesystem/virtual/getRouteNodes'
+// import { getRouteNodes as physicalGetRouteNodes } from './filesystem/physical/getRouteNodes'
+// import { getRouteNodes as virtualGetRouteNodes } from './filesystem/virtual/getRouteNodes'
 import { rootPathId } from './filesystem/physical/rootPathId'
-import type { GetRouteNodesResult, RouteNode } from './types'
+import { getRouteNodes } from './filesystem/plexxis/getRouteNodes'
+import { injectModuleBaseRouteNode } from './filesystem/plexxis/injectModuleBaseRouteNode'
+import { readParentModuleId } from './filesystem/plexxis/readParentModuleId'
+import type { RouteNode } from './types'
 import type { Config } from './config'
 
 let latestTask = 0
@@ -72,22 +75,39 @@ export async function generator(config: Config) {
     parser: 'typescript',
   }
 
-  let getRouteNodesResult: GetRouteNodesResult
+  const parentModuleId = await readParentModuleId()
 
-  if (config.virtualRouteConfig) {
-    getRouteNodesResult = await virtualGetRouteNodes(config)
-  } else {
-    getRouteNodesResult = await physicalGetRouteNodes(config)
+  // let getRouteNodesResult: GetRouteNodesResult
+
+  // if (config.virtualRouteConfig) {
+  //   getRouteNodesResult = await virtualGetRouteNodes(config)
+  // } else {
+  //   getRouteNodesResult = await physicalGetRouteNodes(config)
+  // }
+  const getRouteNodesResult = await getRouteNodes(config, parentModuleId)
+
+  const rootRouteNode: RouteNode = {
+    filePath: '',
+    fullPath: '',
+    routePath: '/',
+    variableName: 'root',
+    isRoot: true,
   }
 
-  const { rootRouteNode, routeNodes: beforeRouteNodes } = getRouteNodesResult
-  if (rootRouteNode === undefined) {
-    let errorMessage = `rootRouteNode must not be undefined. Make sure you've added your root route into the route-tree.`
-    if (!config.virtualRouteConfig) {
-      errorMessage += `\nMake sure that you add a "${rootPathId}.${config.disableTypes ? 'js' : 'tsx'}" file to your routes directory.\nAdd the file in: "${config.routesDirectory}/${rootPathId}.${config.disableTypes ? 'js' : 'tsx'}"`
-    }
-    throw new Error(errorMessage)
+  const { moduleBaseRouteNode, routeNodes: beforeRouteNodes } =
+    getRouteNodesResult
+  if (!moduleBaseRouteNode) {
+    throw new Error(
+      `rootRouteNode must not be undefined. Make sure you've added your root route into the route-tree.`,
+    )
   }
+  // if (rootRouteNode === undefined) {
+  //   let errorMessage = `rootRouteNode must not be undefined. Make sure you've added your root route into the route-tree.`
+  //   if (!config.virtualRouteConfig) {
+  //     errorMessage += `\nMake sure that you add a "${rootPathId}.${config.disableTypes ? 'js' : 'tsx'}" file to your routes directory.\nAdd the file in: "${config.routesDirectory}/${rootPathId}.${config.disableTypes ? 'js' : 'tsx'}"`
+  //   }
+  //   throw new Error(errorMessage)
+  // }
 
   const preRouteNodes = multiSortBy(beforeRouteNodes, [
     (d) => (d.routePath === '/' ? -1 : 1),
@@ -150,7 +170,7 @@ export const Route = createRootRoute({
     }
   }
 
-  await handleRootNode(rootRouteNode)
+  // await handleRootNode(rootRouteNode)
 
   const handleNode = async (node: RouteNode) => {
     let parentRoute = hasParentRoute(routeNodes, node, node.routePath)
@@ -189,7 +209,7 @@ export const Route = createRootRoute({
     if (!node.isVirtualParentRoute && !node.isVirtual) {
       const routeCode = fs.readFileSync(node.fullPath, 'utf-8')
 
-      const escapedRoutePath = node.routePath?.replaceAll('$', '$$') ?? ''
+      const escapedRoutePath = `/${parentModuleId}${node.routePath?.replaceAll('$', '$$')}`
 
       let replaced = routeCode
 
@@ -274,9 +294,9 @@ export const Route = createRootRoute({
         routeCode,
         replaced,
         {
-        beforeWrite: () => {
-          logger.log(`🟡 Updating ${node.fullPath}`)
-        },
+          beforeWrite: () => {
+            logger.log(`🟡 Updating ${node.fullPath}`)
+          },
         },
       )
     }
@@ -477,6 +497,9 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     return children.filter(Boolean).join('\n\n')
   }
 
+  // Plexxis
+  injectModuleBaseRouteNode({ routeTree, moduleBaseRouteNode })
+
   const routeConfigChildrenText = buildRouteTreeConfig(routeTree)
 
   const sortedRouteNodes = multiSortBy(routeNodes, [
@@ -485,6 +508,9 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     (d) => (d.routePath?.endsWith(config.indexToken) ? -1 : 1),
     (d) => d,
   ])
+
+  sortedRouteNodes.unshift(moduleBaseRouteNode)
+  routeNodes.unshift(moduleBaseRouteNode)
 
   const imports = Object.entries({
     createFileRoute: sortedRouteNodes.some((d) => d.isVirtual),
@@ -497,6 +523,8 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
         routePiecesByPath[node.routePath!]?.errorComponent ||
         routePiecesByPath[node.routePath!]?.pendingComponent,
     ),
+    PlexxisModuleRouterContext: true,
+    createRootRouteWithContext: true,
   })
     .filter((d) => d[1])
     .map((d) => d[0])
@@ -522,7 +550,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
       : '',
     '// Import Routes',
     [
-      `import { Route as rootRoute } from "./${getImportPath(rootRouteNode)}"`,
+      // `import { Route as rootRoute } from "./${getImportPath(rootRouteNode)}"`,
       ...sortedRouteNodes
         .filter((d) => !d.isVirtual)
         .map((node) => {
@@ -540,6 +568,11 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
       })
       .join('\n'),
     '// Create/Update Routes',
+    `const rootRoute = createRootRouteWithContext<PlexxisModuleRouterContext>()({${[
+      `staticData: {
+      title: 'Root',
+      }`,
+    ].join(',')}})`,
     sortedRouteNodes
       .map((node) => {
         const loaderNode = routePiecesByPath[node.routePath!]?.loader
@@ -565,14 +598,14 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
         }${TYPES_DISABLED ? '' : 'as any'})`,
           loaderNode
             ? `.updateLoader({ loader: lazyFn(() => import('./${replaceBackslash(
-              removeExt(
-                path.relative(
-                  path.dirname(config.generatedRouteTree),
-                  path.resolve(config.routesDirectory, loaderNode.filePath),
+                removeExt(
+                  path.relative(
+                    path.dirname(config.generatedRouteTree),
+                    path.resolve(config.routesDirectory, loaderNode.filePath),
+                  ),
+                  config.addExtensions,
                 ),
-                config.addExtensions,
-              ),
-            )}'), 'loader') })`
+              )}'), 'loader') })`
             : '',
           componentNode || errorComponentNode || pendingComponentNode
             ? `.update({
@@ -602,17 +635,17 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
             : '',
           lazyComponentNode
             ? `.lazy(() => import('./${replaceBackslash(
-              removeExt(
-                path.relative(
-                  path.dirname(config.generatedRouteTree),
+                removeExt(
+                  path.relative(
+                    path.dirname(config.generatedRouteTree),
                     path.resolve(
                       config.routesDirectory,
                       lazyComponentNode.filePath,
                     ),
+                  ),
+                  config.addExtensions,
                 ),
-                config.addExtensions,
-              ),
-            )}').then((d) => d.Route))`
+              )}').then((d) => d.Route))`
             : '',
         ].join('')
       })
@@ -624,28 +657,28 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
           `declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
     ${routeNodes
-        .map((routeNode) => {
-          const filePathId = routeNode.routePath
+      .map((routeNode) => {
+        const filePathId = routeNode.routePath
 
         const routeId = routeNode.oracleFormName
           ? formatOracleFormPath(filePathId)
           : filePathId
 
-          return `'${routeId}': {
+        return `'${routeId}': {
           id: '${routeId}'
           path: '${routeNode.oracleFormName ? formatOracleFormPath(inferPath(routeNode)) : inferPath(routeNode)}'
           fullPath: '${routeNode.oracleFormName ? formatOracleFormPath(inferFullPath(routeNode)) : inferFullPath(routeNode)}'
           preLoaderRoute: typeof ${routeNode.variableName}Import
           parentRoute: typeof ${
-      routeNode.isVirtualParentRequired
-        ? `${routeNode.parent?.variableName}Route`
-        : routeNode.parent?.variableName
-          ? `${routeNode.parent.variableName}Import`
-          : 'rootRoute'
-      }
+            routeNode.isVirtualParentRequired
+              ? `${routeNode.parent?.variableName}Route`
+              : routeNode.parent?.variableName
+                ? `${routeNode.parent.variableName}Import`
+                : 'rootRoute'
+          }
         }`
-        })
-        .join('\n')}
+      })
+      .join('\n')}
   }
 }`,
         ]),
@@ -657,21 +690,21 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
           `export interface FileRoutesByFullPath {
   ${[...createRouteNodesByFullPath(routeNodes).entries()].map(
     ([fullPath, routeNode]) => {
-        return `'${fullPath}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
+      return `'${fullPath}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
     },
   )}
 }`,
           `export interface FileRoutesByTo {
   ${[...createRouteNodesByTo(routeNodes).entries()].map(([to, routeNode]) => {
-        return `'${to}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
-      })}
+    return `'${to}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
+  })}
 }`,
           `export interface FileRoutesById {
   '__root__': typeof rootRoute,
   ${[...createRouteNodesById(routeNodes).entries()].map(([id, routeNode]) => {
-        // Plexxis
-        return `'${id}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
-      })}
+    // Plexxis
+    return `'${id}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
+  })}
 }`,
           `export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -682,11 +715,13 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
   fileRoutesById: FileRoutesById
 }`,
           `export interface RootRouteChildren {
-  ${routeTree.map((child) => `${child.variableName}Route: typeof ${getResolvedRouteNodeVariableName(child)}`).join(',')}
+  ${`${moduleBaseRouteNode.variableName}Route: typeof ${getResolvedRouteNodeVariableName(
+    moduleBaseRouteNode,
+  )}`}
 }`,
         ]),
     `const rootRouteChildren${TYPES_DISABLED ? '' : ': RootRouteChildren'} = {
-  ${routeTree.map((child) => `${child.variableName}Route: ${getResolvedRouteNodeVariableName(child)}`).join(',')}
+  ${`${moduleBaseRouteNode.variableName}Route: ${getResolvedRouteNodeVariableName(moduleBaseRouteNode)}`}
 }`,
     `export const routeTree = rootRoute._addFileChildren(rootRouteChildren)${TYPES_DISABLED ? '' : '._addFileTypes<FileRouteTypes>()'}`,
     ...config.routeTreeFileFooter,

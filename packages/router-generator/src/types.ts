@@ -18,6 +18,8 @@ export type RouteNode = {
   isVirtual?: boolean
   isLazy?: boolean
   isRoot?: boolean
+  // Plexxis
+  isModuleBase?: boolean
   oracleFormName?: string
   oracleFormTitle?: string
   children?: Array<RouteNode>
