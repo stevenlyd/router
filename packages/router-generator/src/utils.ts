@@ -150,3 +150,28 @@ export async function writeIfDifferent(
 
   return false
 }
+
+export const formatURLComponent = (component: string) =>
+  component.replace(/[_\s]+/g, '-').toLowerCase()
+
+export const formatOracleFormPath = <TPath extends string | undefined>(
+  originalPath: TPath,
+): TPath | string => {
+  if (!originalPath) {
+    return originalPath
+  }
+
+  const match = originalPath.match(/^(.*)\[(\w+)\](.*)?/)
+
+  if (match) {
+    const basePath = match[1] || ''
+    const oracleFormName = match[2]
+    const title = match[3] || ''
+    return `${basePath}${oracleFormName}${title ? `-${formatURLComponent(title)}` : ''}`
+  }
+
+  return originalPath
+}
+
+export const oracleFormNameToTitle = (input: string) =>
+  input.replace(/[-_]/g, ' ').replace(/\b(\w)/g, (char) => char.toUpperCase())

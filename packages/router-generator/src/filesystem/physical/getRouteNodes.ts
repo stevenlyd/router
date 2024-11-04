@@ -132,6 +132,11 @@ export async function getRouteNodes(
             `${removeTrailingSlash(config.apiBase)}/`,
           )
 
+          // Plexxis
+          const oracleFormMatch = routePath.match(/\[(\w+)\](.*)?/)
+          const oracleFormName = oracleFormMatch?.[1] || undefined
+          const oracleFormTitle = oracleFormMatch?.[2] || undefined
+
           const segments = routePath.split('/')
           const lastRouteSegment = segments[segments.length - 1]
           const isLayout =
@@ -174,7 +179,10 @@ export async function getRouteNodes(
             fullPath,
             routePath,
             variableName,
-            isRoute,
+            // Plexxis
+            oracleFormName,
+            oracleFormTitle,
+            isRoute: isRoute || !!oracleFormName,
             isComponent,
             isErrorComponent,
             isPendingComponent,
