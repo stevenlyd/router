@@ -205,11 +205,15 @@ export const Route = createRootRoute({
         // Plexxis
         else if (node.oracleFormName) {
           replaced = [
-            `import { createOracleFormRoute } from '@plexxis/plexxisjs-router'`,
-            `export const Route = createOracleFormRoute('${formatOracleFormPath(escapedRoutePath)}')({
+            `import { createOracleFormFileRoute } from '@plexxis/plexxisjs-router'`,
+            `export const Route = createOracleFormFileRoute('${formatOracleFormPath(
+              escapedRoutePath,
+            )}')({
               title: '${node.oracleFormTitle || oracleFormNameToTitle(node.oracleFormName)}',
               oracleFormName: '${node.oracleFormName}',
+              oracleFormParams: {},
               requiredPermissions: [],
+              icon: undefined,
             })`,
           ].join(`\n\n`)
         } else if (
@@ -231,7 +235,7 @@ export const Route = createRootRoute({
       else if (node.oracleFormName) {
         replaced = routeCode
           .replace(
-            /(createOracleFormRoute\(\s*['"][^'"]*['"]\s*\))/g,
+            /(createOracleFormFileRoute\(\s*['"][^'"]*['"]\s*(?:,\s*)?\))/g,
             (_, p1) =>
               `${p1.replace(/['"][^'"]*['"]/, `"${formatOracleFormPath(escapedRoutePath)}"`)}`,
           )
@@ -270,9 +274,9 @@ export const Route = createRootRoute({
         routeCode,
         replaced,
         {
-          beforeWrite: () => {
-            logger.log(`🟡 Updating ${node.fullPath}`)
-          },
+        beforeWrite: () => {
+          logger.log(`🟡 Updating ${node.fullPath}`)
+        },
         },
       )
     }
@@ -561,14 +565,14 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
         }${TYPES_DISABLED ? '' : 'as any'})`,
           loaderNode
             ? `.updateLoader({ loader: lazyFn(() => import('./${replaceBackslash(
-                removeExt(
-                  path.relative(
-                    path.dirname(config.generatedRouteTree),
-                    path.resolve(config.routesDirectory, loaderNode.filePath),
-                  ),
-                  config.addExtensions,
+              removeExt(
+                path.relative(
+                  path.dirname(config.generatedRouteTree),
+                  path.resolve(config.routesDirectory, loaderNode.filePath),
                 ),
-              )}'), 'loader') })`
+                config.addExtensions,
+              ),
+            )}'), 'loader') })`
             : '',
           componentNode || errorComponentNode || pendingComponentNode
             ? `.update({
@@ -598,17 +602,17 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
             : '',
           lazyComponentNode
             ? `.lazy(() => import('./${replaceBackslash(
-                removeExt(
-                  path.relative(
-                    path.dirname(config.generatedRouteTree),
+              removeExt(
+                path.relative(
+                  path.dirname(config.generatedRouteTree),
                     path.resolve(
                       config.routesDirectory,
                       lazyComponentNode.filePath,
                     ),
-                  ),
-                  config.addExtensions,
                 ),
-              )}').then((d) => d.Route))`
+                config.addExtensions,
+              ),
+            )}').then((d) => d.Route))`
             : '',
         ].join('')
       })
@@ -620,28 +624,28 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
           `declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
     ${routeNodes
-      .map((routeNode) => {
-        const filePathId = routeNode.routePath
+        .map((routeNode) => {
+          const filePathId = routeNode.routePath
 
         const routeId = routeNode.oracleFormName
           ? formatOracleFormPath(filePathId)
           : filePathId
 
-        return `'${routeId}': {
+          return `'${routeId}': {
           id: '${routeId}'
           path: '${routeNode.oracleFormName ? formatOracleFormPath(inferPath(routeNode)) : inferPath(routeNode)}'
           fullPath: '${routeNode.oracleFormName ? formatOracleFormPath(inferFullPath(routeNode)) : inferFullPath(routeNode)}'
           preLoaderRoute: typeof ${routeNode.variableName}Import
           parentRoute: typeof ${
-            routeNode.isVirtualParentRequired
-              ? `${routeNode.parent?.variableName}Route`
-              : routeNode.parent?.variableName
-                ? `${routeNode.parent.variableName}Import`
-                : 'rootRoute'
-          }
+      routeNode.isVirtualParentRequired
+        ? `${routeNode.parent?.variableName}Route`
+        : routeNode.parent?.variableName
+          ? `${routeNode.parent.variableName}Import`
+          : 'rootRoute'
+      }
         }`
-      })
-      .join('\n')}
+        })
+        .join('\n')}
   }
 }`,
         ]),
@@ -653,21 +657,21 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
           `export interface FileRoutesByFullPath {
   ${[...createRouteNodesByFullPath(routeNodes).entries()].map(
     ([fullPath, routeNode]) => {
-      return `'${fullPath}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
+        return `'${fullPath}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
     },
   )}
 }`,
           `export interface FileRoutesByTo {
   ${[...createRouteNodesByTo(routeNodes).entries()].map(([to, routeNode]) => {
-    return `'${to}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
-  })}
+        return `'${to}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
+      })}
 }`,
           `export interface FileRoutesById {
   '__root__': typeof rootRoute,
   ${[...createRouteNodesById(routeNodes).entries()].map(([id, routeNode]) => {
-    // Plexxis
-    return `'${id}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
-  })}
+        // Plexxis
+        return `'${id}': typeof ${getResolvedRouteNodeVariableName(routeNode)}`
+      })}
 }`,
           `export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath

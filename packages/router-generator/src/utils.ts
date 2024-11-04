@@ -3,7 +3,7 @@ import * as prettier from 'prettier'
 
 export function multiSortBy<T>(
   arr: Array<T>,
-  accessors: Array<(item: T) => any> = [(d) => d],
+  accessors: Array<(item: T) => any> = [d => d],
 ): Array<T> {
   return arr
     .map((d, i) => [d, i] as const)
@@ -37,41 +37,41 @@ export function cleanPath(path: string) {
 }
 
 export function trimPathLeft(path: string) {
-  return path === '/' ? path : path.replace(/^\/{1,}/, '')
+  return path === '/' ? path : path.replace(/^\/+/, '')
 }
 
 export function logging(config: { disabled: boolean }) {
   function stripEmojis(str: string) {
-    return str.replace(
-      /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu,
-      '',
-    )
+    return str.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
   }
 
   function formatLogArgs(args: Array<any>): Array<any> {
     if (process.env.CI) {
-      return args.map((arg) =>
-        typeof arg === 'string' ? stripEmojis(arg) : arg,
-      )
+      return args.map(arg => (typeof arg === 'string' ? stripEmojis(arg) : arg))
     }
     return args
   }
 
   return {
     log: (...args: Array<any>) => {
-      if (!config.disabled) console.log(...formatLogArgs(args))
+      if (!config.disabled)
+        console.log(...formatLogArgs(args))
     },
     debug: (...args: Array<any>) => {
-      if (!config.disabled) console.debug(...formatLogArgs(args))
+      if (!config.disabled)
+        console.debug(...formatLogArgs(args))
     },
     info: (...args: Array<any>) => {
-      if (!config.disabled) console.info(...formatLogArgs(args))
+      if (!config.disabled)
+        console.info(...formatLogArgs(args))
     },
     warn: (...args: Array<any>) => {
-      if (!config.disabled) console.warn(...formatLogArgs(args))
+      if (!config.disabled)
+        console.warn(...formatLogArgs(args))
     },
     error: (...args: Array<any>) => {
-      if (!config.disabled) console.error(...formatLogArgs(args))
+      if (!config.disabled)
+        console.error(...formatLogArgs(args))
     },
   }
 }
@@ -89,7 +89,7 @@ export function determineInitialRoutePath(routePath: string) {
 }
 
 export function replaceBackslash(s: string) {
-  return s.replaceAll(/\\/gi, '/')
+  return s.replaceAll(/\\/g, '/')
 }
 
 export function routePathToVariable(routePath: string): string {
@@ -101,17 +101,18 @@ export function routePathToVariable(routePath: string): string {
       .split(/[/-]/g)
       .map((d, i) => (i > 0 ? capitalize(d) : d))
       .join('')
-      .replace(/([^a-zA-Z0-9]|[.])/gm, '')
+      .replace(/([^a-z0-9]|\.)/gi, '')
       .replace(/^(\d)/g, 'R$1') ?? ''
   )
 }
 
 export function removeUnderscores(s?: string) {
-  return s?.replaceAll(/(^_|_$)/gi, '').replaceAll(/(\/_|_\/)/gi, '/')
+  return s?.replaceAll(/(^_|_$)/g, '').replaceAll(/(\/_|_\/)/g, '/')
 }
 
 export function capitalize(s: string) {
-  if (typeof s !== 'string') return ''
+  if (typeof s !== 'string')
+    return ''
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
@@ -134,7 +135,7 @@ export async function writeIfDifferent(
   prettierOptions: prettier.Options,
   content: string,
   incomingContent: string,
-  callbacks?: { beforeWrite?: () => void; afterWrite?: () => void },
+  callbacks?: { beforeWrite?: () => void, afterWrite?: () => void },
 ): Promise<boolean> {
   const [formattedContent, updatedContent] = await Promise.all([
     prettier.format(content, prettierOptions),
@@ -167,7 +168,7 @@ export const formatOracleFormPath = <TPath extends string | undefined>(
     const basePath = match[1] || ''
     const oracleFormName = match[2]
     const title = match[3] || ''
-    return `${basePath}${oracleFormName}${title ? `-${formatURLComponent(title)}` : ''}`
+    return `${basePath}${oracleFormName}${title ? `(${formatURLComponent(title)})` : ''}`
   }
 
   return originalPath
