@@ -175,7 +175,10 @@ export async function getRouteNodes(config: Config, parentModuleId: string) {
           routeNodes.push({
             filePath,
             fullPath,
-            routePath,
+            routePath:
+              routePath === `/${moduleBasePathId}`
+                ? routePath
+                : `/${parentModuleId}${routePath}`,
             variableName,
             // Plexxis
             oracleFormName,
@@ -210,7 +213,6 @@ export async function getRouteNodes(config: Config, parentModuleId: string) {
     moduleBaseRouteNode.cleanedPath = `/${parentModuleId}`
     moduleBaseRouteNode.routePath = `/${parentModuleId}`
     moduleBaseRouteNode.variableName = 'moduleBase'
-    routeNodes.splice(moduleBaseRouteNodeIndex, 1)
   }
 
   return { moduleBaseRouteNode, routeNodes }

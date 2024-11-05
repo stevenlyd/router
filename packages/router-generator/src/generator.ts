@@ -16,11 +16,8 @@ import {
   trimPathLeft,
   writeIfDifferent,
 } from './utils'
-// import { getRouteNodes as physicalGetRouteNodes } from './filesystem/physical/getRouteNodes'
-// import { getRouteNodes as virtualGetRouteNodes } from './filesystem/virtual/getRouteNodes'
 import { rootPathId } from './filesystem/physical/rootPathId'
 import { getRouteNodes } from './filesystem/plexxis/getRouteNodes'
-import { injectModuleBaseRouteNode } from './filesystem/plexxis/injectModuleBaseRouteNode'
 import { readParentModuleId } from './filesystem/plexxis/readParentModuleId'
 import type { RouteNode } from './types'
 import type { Config } from './config'
@@ -137,38 +134,39 @@ export async function generator(config: Config) {
   // the handleRootNode function is not being collapsed into the handleNode function
   // because it requires only a subset of the logic that the handleNode function requires
   // and it's easier to read and maintain this way
-  const handleRootNode = async (node?: RouteNode) => {
-    if (!node) {
-      // currently this is not being handled, but it could be in the future
-      // for example to handle a virtual root route
-      return
-    }
 
-    // from here on, we are only handling the root node that's present in the file system
-    const routeCode = fs.readFileSync(node.fullPath, 'utf-8')
+  // const handleRootNode = async (node?: RouteNode) => {
+  //   if (!node) {
+  //     // currently this is not being handled, but it could be in the future
+  //     // for example to handle a virtual root route
+  //     return
+  //   }
 
-    if (!routeCode) {
-      const replaced = `import * as React from 'react';
-import { Outlet, createRootRoute } from '@plexxis/plexxisjs-router';
+  //   // from here on, we are only handling the root node that's present in the file system
+  //   const routeCode = fs.readFileSync(node.fullPath, 'utf-8')
 
-export const Route = createRootRoute({
-  component: () => (
-    <React.Fragment>
-      <div>Hello "${rootPathId}"!</div>
-      <Outlet />
-    </React.Fragment>
-  ),
-})
+  //   if (!routeCode) {
+  //     const replaced = `import * as React from 'react';
+  // import { Outlet, createRootRoute } from '@plexxis/plexxisjs-router';
 
-`
+  // export const Route = createRootRoute({
+  //   component: () => (
+  //     <React.Fragment>
+  //       <div>Hello "${rootPathId}"!</div>
+  //       <Outlet />
+  //     </React.Fragment>
+  //   ),
+  // })
 
-      logger.log(`🟡 Creating ${node.fullPath}`)
-      fs.writeFileSync(
-        node.fullPath,
-        await prettier.format(replaced, prettierOptions),
-      )
-    }
-  }
+  // `
+
+  //     logger.log(`🟡 Creating ${node.fullPath}`)
+  //     fs.writeFileSync(
+  //       node.fullPath,
+  //       await prettier.format(replaced, prettierOptions),
+  //     )
+  //   }
+  // }
 
   // await handleRootNode(rootRouteNode)
 
@@ -209,7 +207,7 @@ export const Route = createRootRoute({
     if (!node.isVirtualParentRoute && !node.isVirtual) {
       const routeCode = fs.readFileSync(node.fullPath, 'utf-8')
 
-      const escapedRoutePath = `/${parentModuleId}${node.routePath?.replaceAll('$', '$$')}`
+      const escapedRoutePath = node.routePath?.replaceAll('$', '$$') ?? ''
 
       let replaced = routeCode
 
@@ -352,36 +350,38 @@ export const Route = createRootRoute({
         (d) => d.routePath === parentRoutePath,
       )
 
-      if (!anchorRoute) {
-        const parentNode = {
-          ...node,
-          path: removeLastSegmentFromPath(node.path) || '/',
-          filePath: removeLastSegmentFromPath(node.filePath) || '/',
-          fullPath: removeLastSegmentFromPath(node.fullPath) || '/',
-          routePath: parentRoutePath,
-          variableName: parentVariableName,
-          isVirtual: true,
-          isLayout: false,
-          isVirtualParentRoute: true,
-          isVirtualParentRequired: false,
+      if (!node.isModuleBase) {
+        if (!anchorRoute) {
+          const parentNode = {
+            ...node,
+            path: removeLastSegmentFromPath(node.path) || '/',
+            filePath: removeLastSegmentFromPath(node.filePath) || '/',
+            fullPath: removeLastSegmentFromPath(node.fullPath) || '/',
+            routePath: parentRoutePath,
+            variableName: parentVariableName,
+            isVirtual: true,
+            isLayout: false,
+            isVirtualParentRoute: true,
+            isVirtualParentRequired: false,
+          }
+
+          parentNode.children = parentNode.children ?? []
+          parentNode.children.push(node)
+
+          node.parent = parentNode
+
+          if (node.isLayout) {
+            // since `node.path` is used as the `id` on the route definition, we need to update it
+            node.path = determineNodePath(node)
+          }
+
+          await handleNode(parentNode)
+        } else {
+          anchorRoute.children = anchorRoute.children ?? []
+          anchorRoute.children.push(node)
+
+          node.parent = anchorRoute
         }
-
-        parentNode.children = parentNode.children ?? []
-        parentNode.children.push(node)
-
-        node.parent = parentNode
-
-        if (node.isLayout) {
-          // since `node.path` is used as the `id` on the route definition, we need to update it
-          node.path = determineNodePath(node)
-        }
-
-        await handleNode(parentNode)
-      } else {
-        anchorRoute.children = anchorRoute.children ?? []
-        anchorRoute.children.push(node)
-
-        node.parent = anchorRoute
       }
     }
 
@@ -498,7 +498,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
   }
 
   // Plexxis
-  injectModuleBaseRouteNode({ routeTree, moduleBaseRouteNode })
+  // injectModuleBaseRouteNode({ routeTree, moduleBaseRouteNode })
 
   const routeConfigChildrenText = buildRouteTreeConfig(routeTree)
 
@@ -509,8 +509,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     (d) => d,
   ])
 
-  sortedRouteNodes.unshift(moduleBaseRouteNode)
-  routeNodes.unshift(moduleBaseRouteNode)
+  // routeNodes.unshift(moduleBaseRouteNode)
 
   const imports = Object.entries({
     createFileRoute: sortedRouteNodes.some((d) => d.isVirtual),
@@ -670,11 +669,13 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
           fullPath: '${routeNode.oracleFormName ? formatOracleFormPath(inferFullPath(routeNode)) : inferFullPath(routeNode)}'
           preLoaderRoute: typeof ${routeNode.variableName}Import
           parentRoute: typeof ${
-            routeNode.isVirtualParentRequired
-              ? `${routeNode.parent?.variableName}Route`
-              : routeNode.parent?.variableName
-                ? `${routeNode.parent.variableName}Import`
-                : 'rootRoute'
+            routeNode.isModuleBase
+              ? 'rootRoute'
+              : routeNode.isVirtualParentRequired
+                ? `${routeNode.parent?.variableName}Route`
+                : routeNode.parent?.variableName
+                  ? `${routeNode.parent.variableName}Import`
+                  : 'rootRoute'
           }
         }`
       })
