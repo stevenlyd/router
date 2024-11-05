@@ -201,11 +201,9 @@ export async function getRouteNodes(config: Config, parentModuleId: string) {
 
   await recurse('./')
 
-  const moduleBaseRouteNodeIndex = routeNodes.findIndex(
+  const moduleBaseRouteNode = routeNodes.find(
     (d) => d.routePath === `/${moduleBasePathId}`,
   )
-
-  const moduleBaseRouteNode = routeNodes[moduleBaseRouteNodeIndex]
 
   if (moduleBaseRouteNode) {
     moduleBaseRouteNode.isModuleBase = true
