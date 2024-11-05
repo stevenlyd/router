@@ -524,6 +524,8 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     ),
     PlexxisModuleRouterContext: true,
     createRootRouteWithContext: true,
+    Navigate: true,
+    createRoute: true,
   })
     .filter((d) => d[1])
     .map((d) => d[0])
@@ -567,11 +569,25 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
       })
       .join('\n'),
     '// Create/Update Routes',
-    `const rootRoute = createRootRouteWithContext<PlexxisModuleRouterContext>()({${[
-      `staticData: {
-      title: 'Root',
+    [
+      `const rootRoute = createRootRouteWithContext<PlexxisModuleRouterContext>()({${[
+        `staticData: {
+        title: 'Root',
       }`,
-    ].join(',')}})`,
+      ].join(',')}})`,
+      `const rootIndexRoute = createRoute({
+      ${[
+        `path: '/'`,
+        `getParentRoute: () => rootRoute`,
+        `staticData: {
+        title: 'Root Index'}`,
+        `component: () => Navigate({
+        to: "/service",
+        replace: true,
+        })`,
+      ].join(',')}
+      })`,
+    ].join('\n'),
     sortedRouteNodes
       .map((node) => {
         const loaderNode = routePiecesByPath[node.routePath!]?.loader
@@ -716,13 +732,16 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
   fileRoutesById: FileRoutesById
 }`,
           `export interface RootRouteChildren {
-  ${`${moduleBaseRouteNode.variableName}Route: typeof ${getResolvedRouteNodeVariableName(
-    moduleBaseRouteNode,
-  )}`}
+  ${[
+    `${moduleBaseRouteNode.variableName}Route: typeof ${getResolvedRouteNodeVariableName(
+      moduleBaseRouteNode,
+    )}`,
+    `rootIndexRoute: typeof rootIndexRoute`,
+  ].join(',')}
 }`,
         ]),
     `const rootRouteChildren${TYPES_DISABLED ? '' : ': RootRouteChildren'} = {
-  ${`${moduleBaseRouteNode.variableName}Route: ${getResolvedRouteNodeVariableName(moduleBaseRouteNode)}`}
+  ${[`${moduleBaseRouteNode.variableName}Route: ${getResolvedRouteNodeVariableName(moduleBaseRouteNode)}`, `rootIndexRoute: rootIndexRoute`].join(',')}
 }`,
     `export const routeTree = rootRoute._addFileChildren(rootRouteChildren)${TYPES_DISABLED ? '' : '._addFileTypes<FileRouteTypes>()'}`,
     ...config.routeTreeFileFooter,
