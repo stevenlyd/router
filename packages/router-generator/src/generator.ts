@@ -512,7 +512,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
   // routeNodes.unshift(moduleBaseRouteNode)
 
   const imports = Object.entries({
-    createFileRoute: sortedRouteNodes.some((d) => d.isVirtual),
+    // createFileRoute: sortedRouteNodes.some((d) => d.isVirtual),
     lazyFn: sortedRouteNodes.some(
       (node) => routePiecesByPath[node.routePath!]?.loader,
     ),
@@ -526,6 +526,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     createRootRouteWithContext: true,
     Navigate: true,
     createRoute: true,
+    createFileRoute: true,
   })
     .filter((d) => d[1])
     .map((d) => d[0])
@@ -552,8 +553,9 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     '// Import Routes',
     [
       // `import { Route as rootRoute } from "./${getImportPath(rootRouteNode)}"`,
+      `import { Route as moduleBaseRouteOptions } from "./${getImportPath(moduleBaseRouteNode)}"`,
       ...sortedRouteNodes
-        .filter((d) => !d.isVirtual)
+        .filter((d) => !d.isVirtual && !d.isModuleBase)
         .map((node) => {
           return `import { Route as ${
             node.variableName
@@ -597,6 +599,17 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
         const pendingComponentNode =
           routePiecesByPath[node.routePath!]?.pendingComponent
         const lazyComponentNode = routePiecesByPath[node.routePath!]?.lazy
+
+        if (node.isModuleBase) {
+          return [
+            `const moduleBaseImport = createFileRoute('${node.routePath}')(moduleBaseRouteOptions)`,
+            `const moduleBaseRoute = moduleBaseImport.update({
+            id: '${node.routePath}',
+            path: '${node.routePath}',
+            getParentRoute: () => rootRoute,
+            } as any)`,
+          ].join('\n\n')
+        }
 
         return [
           `const ${node.variableName}Route = ${node.variableName}Import.update({
