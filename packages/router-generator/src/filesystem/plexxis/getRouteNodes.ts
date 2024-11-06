@@ -20,7 +20,13 @@ import type { Config } from '../../config'
 
 const disallowedRouteGroupConfiguration = /\(([^)]+)\).(ts|js|tsx|jsx)/
 
-export async function getRouteNodes(config: Config, parentModuleId: string) {
+export async function getRouteNodes(
+  config: Config,
+  { name: parentModuleName }: { id: string; name: string },
+) {
+  const formattedParentModuleName = parentModuleName
+    .replace(/[_\s]+/g, '-')
+    .toLowerCase()
   const { routeFilePrefix, routeFileIgnorePrefix, routeFileIgnorePattern } =
     config
   const logger = logging({ disabled: config.disableLogging })
@@ -178,7 +184,7 @@ export async function getRouteNodes(config: Config, parentModuleId: string) {
             routePath:
               routePath === `/${moduleBasePathId}`
                 ? routePath
-                : `/${parentModuleId}${routePath}`,
+                : `/${formattedParentModuleName}${routePath}`,
             variableName,
             // Plexxis
             oracleFormName,
@@ -207,9 +213,9 @@ export async function getRouteNodes(config: Config, parentModuleId: string) {
 
   if (moduleBaseRouteNode) {
     moduleBaseRouteNode.isModuleBase = true
-    moduleBaseRouteNode.path = `/${parentModuleId}`
-    moduleBaseRouteNode.cleanedPath = `/${parentModuleId}`
-    moduleBaseRouteNode.routePath = `/${parentModuleId}`
+    moduleBaseRouteNode.path = `/${formattedParentModuleName}`
+    moduleBaseRouteNode.cleanedPath = `/${formattedParentModuleName}`
+    moduleBaseRouteNode.routePath = `/${formattedParentModuleName}`
     moduleBaseRouteNode.variableName = 'moduleBase'
   }
 

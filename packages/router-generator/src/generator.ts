@@ -18,7 +18,7 @@ import {
 } from './utils'
 import { rootPathId } from './filesystem/physical/rootPathId'
 import { getRouteNodes } from './filesystem/plexxis/getRouteNodes'
-import { readParentModuleId } from './filesystem/plexxis/readParentModuleId'
+import { readParentModuleMetadata } from './filesystem/plexxis/readParentModuleMetadata'
 import type { RouteNode } from './types'
 import type { Config } from './config'
 
@@ -72,7 +72,7 @@ export async function generator(config: Config) {
     parser: 'typescript',
   }
 
-  const parentModuleId = await readParentModuleId()
+  const parentModuleMetadata = await readParentModuleMetadata()
 
   // let getRouteNodesResult: GetRouteNodesResult
 
@@ -81,7 +81,7 @@ export async function generator(config: Config) {
   // } else {
   //   getRouteNodesResult = await physicalGetRouteNodes(config)
   // }
-  const getRouteNodesResult = await getRouteNodes(config, parentModuleId)
+  const getRouteNodesResult = await getRouteNodes(config, parentModuleMetadata)
 
   const rootRouteNode: RouteNode = {
     filePath: '',
@@ -582,7 +582,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
         `staticData: {
         title: 'Root Index'}`,
         `component: () => Navigate({
-        to: "/service",
+        to: '${moduleBaseRouteNode.routePath}',
         replace: true,
         })`,
       ].join(',')}
