@@ -72,6 +72,7 @@ export async function generator(config: Config) {
     parser: 'typescript',
   }
 
+  // Plexxis
   const parentModuleMetadata = await readParentModuleMetadata()
 
   // let getRouteNodesResult: GetRouteNodesResult
@@ -497,9 +498,6 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     return children.filter(Boolean).join('\n\n')
   }
 
-  // Plexxis
-  // injectModuleBaseRouteNode({ routeTree, moduleBaseRouteNode })
-
   const routeConfigChildrenText = buildRouteTreeConfig(routeTree)
 
   const sortedRouteNodes = multiSortBy(routeNodes, [
@@ -509,9 +507,8 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     (d) => d,
   ])
 
-  // routeNodes.unshift(moduleBaseRouteNode)
-
   const imports = Object.entries({
+    // Plexxis
     // createFileRoute: sortedRouteNodes.some((d) => d.isVirtual),
     lazyFn: sortedRouteNodes.some(
       (node) => routePiecesByPath[node.routePath!]?.loader,
@@ -522,6 +519,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
         routePiecesByPath[node.routePath!]?.errorComponent ||
         routePiecesByPath[node.routePath!]?.pendingComponent,
     ),
+    // Plexxis
     PlexxisModuleRouterContext: true,
     createRootRouteWithContext: true,
     Navigate: true,
@@ -553,6 +551,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
     '// Import Routes',
     [
       // `import { Route as rootRoute } from "./${getImportPath(rootRouteNode)}"`,
+      // Plexxis
       `import { Route as moduleBaseRouteOptions } from "./${getImportPath(moduleBaseRouteNode)}"`,
       ...sortedRouteNodes
         .filter((d) => !d.isVirtual && !d.isModuleBase)
@@ -571,6 +570,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
       })
       .join('\n'),
     '// Create/Update Routes',
+    // Plexxis
     [
       `const rootRoute = createRootRouteWithContext<PlexxisModuleRouterContext>()({${[
         `staticData: {
@@ -600,6 +600,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
           routePiecesByPath[node.routePath!]?.pendingComponent
         const lazyComponentNode = routePiecesByPath[node.routePath!]?.lazy
 
+        // Plexxis
         if (node.isModuleBase) {
           return [
             `const moduleBaseImport = createFileRoute('${node.routePath}')(moduleBaseRouteOptions)`,
@@ -744,6 +745,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
   id: ${[`'__root__'`, ...[...createRouteNodesById(routeNodes).keys()].map((id) => `'${id}'`)].join('|')}
   fileRoutesById: FileRoutesById
 }`,
+          // Plexxis
           `export interface RootRouteChildren {
   ${[
     `${moduleBaseRouteNode.variableName}Route: typeof ${getResolvedRouteNodeVariableName(
