@@ -589,7 +589,7 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
         })`,
       ].join(',')}
       })`,
-    ].join('\n'),
+    ].join('\n\n'),
     sortedRouteNodes
       .map((node) => {
         const loaderNode = routePiecesByPath[node.routePath!]?.loader
