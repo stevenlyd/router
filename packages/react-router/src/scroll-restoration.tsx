@@ -45,6 +45,7 @@ const cache: Cache = sessionsStorage
 
 export type ScrollRestorationOptions = {
   getKey?: (location: ParsedLocation) => string
+  scrollBehavior?: ScrollToOptions['behavior']
 }
 
 /**
@@ -105,7 +106,7 @@ export function useScrollRestoration(options?: ScrollRestorationOptions) {
     }
 
     const unsubOnBeforeLoad = router.subscribe('onBeforeLoad', (event) => {
-      if (event.pathChanged) {
+      if (event.hrefChanged) {
         const restoreKey = getKey(event.fromLocation)
         for (const elementSelector in cache.state.next) {
           const entry = cache.state.next[elementSelector]!
@@ -138,7 +139,7 @@ export function useScrollRestoration(options?: ScrollRestorationOptions) {
     const unsubOnBeforeRouteMount = router.subscribe(
       'onBeforeRouteMount',
       (event) => {
-        if (event.pathChanged) {
+        if (event.hrefChanged) {
           if (!router.resetNextScroll) {
             return
           }
@@ -154,7 +155,11 @@ export function useScrollRestoration(options?: ScrollRestorationOptions) {
             if (key === restoreKey) {
               if (elementSelector === windowKey) {
                 windowRestored = true
-                window.scrollTo(entry.scrollX, entry.scrollY)
+                window.scrollTo({
+                  top: entry.scrollY,
+                  left: entry.scrollX,
+                  behavior: options?.scrollBehavior,
+                })
               } else if (elementSelector) {
                 const element = document.querySelector(elementSelector)
                 if (element) {

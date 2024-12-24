@@ -10,19 +10,24 @@ import {
 } from '../../utils'
 import { getRouteNodes as getRouteNodesVirtual } from '../virtual/getRouteNodes'
 import { loadConfigFile } from '../virtual/loadConfigFile'
-import { rootPathId } from './rootPathId'
+import { moduleBasePathId } from '../plexxis/moduleBasePathId'
 import type {
   VirtualRootRoute,
   VirtualRouteSubtreeConfig,
 } from '@tanstack/virtual-file-routes'
-import type { GetRouteNodesResult, RouteNode } from '../../types'
+import type { RouteNode } from '../../types'
 import type { Config } from '../../config'
 
 const disallowedRouteGroupConfiguration = /\(([^)]+)\).(ts|js|tsx|jsx)/
 
 export async function getRouteNodes(
   config: Config,
-): Promise<GetRouteNodesResult> {
+  root: string,
+  { name: parentModuleName }: { id: string; name: string },
+) {
+  const formattedParentModuleName = parentModuleName
+    .replace(/[_\s]+/g, '-')
+    .toLowerCase()
   const { routeFilePrefix, routeFileIgnorePrefix, routeFileIgnorePattern } =
     config
   const logger = logging({ disabled: config.disableLogging })
@@ -72,11 +77,14 @@ export async function getRouteNodes(
         file: '',
         children: virtualRouteSubtreeConfig,
       }
-      const { routeNodes: virtualRouteNodes } = await getRouteNodesVirtual({
-        ...config,
-        routesDirectory: fullDir,
-        virtualRouteConfig: dummyRoot,
-      })
+      const { routeNodes: virtualRouteNodes } = await getRouteNodesVirtual(
+        {
+          ...config,
+          routesDirectory: fullDir,
+          virtualRouteConfig: dummyRoot,
+        },
+        root,
+      )
       virtualRouteNodes.forEach((node) => {
         const filePath = replaceBackslash(path.join(dir, node.filePath))
         const routePath = `/${dir}${node.routePath}`
@@ -95,8 +103,8 @@ export async function getRouteNodes(
 
     await Promise.all(
       dirList.map(async (dirent) => {
-        const fullPath = path.join(fullDir, dirent.name)
-        const relativePath = path.join(dir, dirent.name)
+        const fullPath = path.posix.join(fullDir, dirent.name)
+        const relativePath = path.posix.join(dir, dirent.name)
 
         if (dirent.isDirectory()) {
           await recurse(relativePath)
@@ -177,7 +185,10 @@ export async function getRouteNodes(
           routeNodes.push({
             filePath,
             fullPath,
-            routePath,
+            routePath:
+              routePath === `/${moduleBasePathId}`
+                ? routePath
+                : `/${formattedParentModuleName}${routePath}`,
             variableName,
             // Plexxis
             oracleFormName,
@@ -200,6 +211,18 @@ export async function getRouteNodes(
 
   await recurse('./')
 
-  const rootRouteNode = routeNodes.find((d) => d.routePath === `/${rootPathId}`)
-  return { rootRouteNode, routeNodes }
+  // Plexxis
+  const moduleBaseRouteNode = routeNodes.find(
+    (d) => d.routePath === `/${moduleBasePathId}`,
+  )
+
+  if (moduleBaseRouteNode) {
+    moduleBaseRouteNode.isModuleBase = true
+    moduleBaseRouteNode.path = `/${formattedParentModuleName}`
+    moduleBaseRouteNode.cleanedPath = `/${formattedParentModuleName}`
+    moduleBaseRouteNode.routePath = `/${formattedParentModuleName}`
+    moduleBaseRouteNode.variableName = 'moduleBase'
+  }
+
+  return { moduleBaseRouteNode, routeNodes }
 }

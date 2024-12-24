@@ -1,7 +1,8 @@
 /// <reference types="vinxi/types/server" />
 import {
-  defaultParseSearch,
+  defaultTransformer,
   isNotFound,
+  isPlainObject,
   isRedirect,
 } from '@tanstack/react-router'
 import invariant from 'tiny-invariant'
@@ -12,10 +13,6 @@ import {
   toWebRequest,
 } from 'vinxi/http'
 import { getManifest } from 'vinxi/manifest'
-import {
-  serverFnPayloadTypeHeader,
-  serverFnReturnTypeHeader,
-} from '../constants'
 import type { H3Event } from 'vinxi/server'
 
 export default eventHandler(handleServerAction)
@@ -24,12 +21,10 @@ async function handleServerAction(event: H3Event) {
   return handleServerRequest(toWebRequest(event), event)
 }
 
-export async function handleServerRequest(request: Request, event?: H3Event) {
+export async function handleServerRequest(request: Request, _event?: H3Event) {
   const method = request.method
   const url = new URL(request.url, 'http://localhost:3000')
-  const search = Object.fromEntries(
-    new URLSearchParams(url.search).entries(),
-  ) as {
+  const search = Object.fromEntries(url.searchParams.entries()) as {
     _serverFnId?: string
     _serverFnName?: string
     payload?: any
@@ -54,45 +49,46 @@ export async function handleServerRequest(request: Request, event?: H3Event) {
 
   const response = await (async () => {
     try {
-      const args = await (async () => {
-        if (request.headers.get(serverFnPayloadTypeHeader) === 'payload') {
-          return [
-            method.toLowerCase() === 'get'
-              ? (() => {
-                  return (defaultParseSearch(url.search) as any)?.payload
-                })()
-              : await request.json(),
-            { method, request },
-          ] as const
-        }
-
+      const arg = await (async () => {
+        // FormData
         if (
-          request.headers.get(serverFnPayloadTypeHeader) === 'formData' ||
           request.headers.get('Content-Type')?.includes('multipart/form-data')
         ) {
-          return [
-            method.toLowerCase() === 'get'
-              ? (() => {
-                  const { _serverFnId, _serverFnName, payload } = search
-                  return payload
-                })()
-              : await request.formData(),
-            { method, request },
-          ] as const
+          // We don't support GET requests with FormData payloads... that seems impossible
+          invariant(
+            method.toLowerCase() !== 'get',
+            'GET requests with FormData payloads are not supported',
+          )
+
+          return await request.formData()
         }
 
-        if (request.headers.get(serverFnPayloadTypeHeader) === 'request') {
-          return [request, { method, request }] as const
+        // Get requests use the query string
+        if (method.toLowerCase() === 'get') {
+          // First we need to get the ?payload query string
+          if (!search.payload) {
+            return undefined
+          }
+
+          // If there's a payload, we need to parse it
+          return defaultTransformer.parse(search.payload)
         }
 
-        // payload type === 'args'
-        return (await request.json()) as Array<any>
+        // For non-form, non-get
+        const jsonPayloadAsString = await request.text()
+        return defaultTransformer.parse(jsonPayloadAsString)
       })()
 
-      const result = await action(...args)
+      const result = await action(arg)
 
       if (result instanceof Response) {
         return result
+      } else if (
+        isPlainObject(result) &&
+        'result' in result &&
+        result.result instanceof Response
+      ) {
+        return result.result
       }
 
       // TODO: RSCs
@@ -106,7 +102,6 @@ export async function handleServerRequest(request: Request, event?: H3Event) {
 
       //   setHeaders(event, {
       //     'Content-Type': 'text/x-component',
-      //     [serverFnReturnTypeHeader]: 'rsc',
       //   } as any)
 
       //   sendStream(event, response)
@@ -120,18 +115,23 @@ export async function handleServerRequest(request: Request, event?: H3Event) {
       }
 
       return new Response(
-        result !== undefined ? JSON.stringify(result) : undefined,
+        result !== undefined ? defaultTransformer.stringify(result) : undefined,
         {
           status: getResponseStatus(getEvent()),
           headers: {
             'Content-Type': 'application/json',
-            [serverFnReturnTypeHeader]: 'json',
           },
         },
       )
     } catch (error: any) {
       if (error instanceof Response) {
         return error
+      } else if (
+        isPlainObject(error) &&
+        'result' in error &&
+        error.result instanceof Response
+      ) {
+        return error.result
       }
 
       // Currently this server-side context has no idea how to
@@ -147,11 +147,10 @@ export async function handleServerRequest(request: Request, event?: H3Event) {
       console.error(error)
       console.info()
 
-      return new Response(JSON.stringify(error), {
+      return new Response(defaultTransformer.stringify(error), {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          [serverFnReturnTypeHeader]: 'error',
         },
       })
     }
@@ -182,8 +181,7 @@ function redirectOrNotFoundResponse(error: any) {
     status: 200,
     headers: {
       'Content-Type': 'application/json',
-      [serverFnReturnTypeHeader]: 'json',
-      ...(error.headers || {}),
+      ...(headers || {}),
     },
   })
 }

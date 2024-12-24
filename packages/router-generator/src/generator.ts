@@ -17,10 +17,15 @@ import {
   writeIfDifferent,
 } from './utils'
 import { rootPathId } from './filesystem/physical/rootPathId'
-import { getRouteNodes } from './filesystem/plexxis/getRouteNodes'
+import { getRouteNodes } from './filesystem/physical/getRouteNodes'
 import { readParentModuleMetadata } from './filesystem/plexxis/readParentModuleMetadata'
 import type { RouteNode } from './types'
 import type { Config } from './config'
+
+export const CONSTANTS = {
+  // When changing this, you'll want to update the import in `start/api/index.ts#defaultAPIFileRouteHandler`
+  APIRouteExportVariable: 'APIRoute',
+}
 
 let latestTask = 0
 const routeGroupPatternRegex = /\(.+\)/g
@@ -37,7 +42,7 @@ type RouteSubNode = {
   lazy?: RouteNode
 }
 
-export async function generator(config: Config) {
+export async function generator(config: Config, root: string) {
   const logger = logging({ disabled: config.disableLogging })
   logger.log('')
 
@@ -78,11 +83,11 @@ export async function generator(config: Config) {
   // let getRouteNodesResult: GetRouteNodesResult
 
   // if (config.virtualRouteConfig) {
-  //   getRouteNodesResult = await virtualGetRouteNodes(config)
+  //   getRouteNodesResult = await virtualGetRouteNodes(config, root)
   // } else {
-  //   getRouteNodesResult = await physicalGetRouteNodes(config)
+  //   getRouteNodesResult = await physicalGetRouteNodes(config, root)
   // }
-  const getRouteNodesResult = await getRouteNodes(config, parentModuleMetadata)
+  const getRouteNodesResult = await getRouteNodes(config,root, parentModuleMetadata)
 
   const rootRouteNode: RouteNode = {
     filePath: '',
@@ -146,20 +151,23 @@ export async function generator(config: Config) {
   //   // from here on, we are only handling the root node that's present in the file system
   //   const routeCode = fs.readFileSync(node.fullPath, 'utf-8')
 
-  //   if (!routeCode) {
-  //     const replaced = `import * as React from 'react';
-  // import { Outlet, createRootRoute } from '@plexxis/plexxisjs-router';
-
-  // export const Route = createRootRoute({
-  //   component: () => (
-  //     <React.Fragment>
-  //       <div>Hello "${rootPathId}"!</div>
-  //       <Outlet />
-  //     </React.Fragment>
-  //   ),
-  // })
-
-  // `
+    // if (!routeCode) {
+    //   const replaced = fillTemplate(
+    //     [
+    //       'import * as React from "react"\n',
+    //       '%%tsrImports%%',
+    //       '\n\n',
+    //       '%%tsrExportStart%%{\n component: RootComponent\n }%%tsrExportEnd%%\n\n',
+    //       'function RootComponent() { return (<React.Fragment><div>Hello "%%tsrPath%%"!</div><Outlet /></React.Fragment>) };\n',
+    //     ].join(''),
+    //     {
+    //       tsrImports:
+    //         "import { Outlet, createRootRoute } from '@tanstack/react-router';",
+    //       tsrPath: rootPathId,
+    //       tsrExportStart: `export const Route = createRootRoute(`,
+    //       tsrExportEnd: ');',
+    //     },
+    //   )
 
   //     logger.log(`🟡 Creating ${node.fullPath}`)
   //     fs.writeFileSync(
@@ -214,12 +222,13 @@ export async function generator(config: Config) {
 
       if (!routeCode) {
         if (node.isLazy) {
-          replaced = [
-            `import { createLazyFileRoute } from '@plexxis/plexxisjs-router'`,
-            `export const Route = createLazyFileRoute('${escapedRoutePath}')({
-  component: () => <div>Hello ${escapedRoutePath}!</div>
-})`,
-          ].join('\n\n')
+          replaced = fillTemplate(config.customScaffolding.routeTemplate, {
+            tsrImports:
+              "import { createLazyFileRoute } from '@plexxis/plexxisjs-router';",
+            tsrPath: escapedRoutePath,
+            tsrExportStart: `export const Route = createLazyFileRoute('${escapedRoutePath}')(`,
+            tsrExportEnd: ');',
+          })
         }
         // Plexxis
         else if (node.oracleFormName) {
@@ -242,12 +251,13 @@ export async function generator(config: Config) {
             !node.isPendingComponent &&
             !node.isLoader)
         ) {
-          replaced = [
-            `import { createFileRoute } from '@plexxis/plexxisjs-router'`,
-            `export const Route = createFileRoute('${escapedRoutePath}')({
-  component: () => <div>Hello ${escapedRoutePath}!</div>
-})`,
-          ].join('\n\n')
+          replaced = fillTemplate(config.customScaffolding.routeTemplate, {
+            tsrImports:
+              "import { createFileRoute } from '@plexxis/plexxisjs-router';",
+            tsrPath: escapedRoutePath,
+            tsrExportStart: `export const Route = createFileRoute('${escapedRoutePath}')(`,
+            tsrExportEnd: ');',
+          })
         }
       }
       // Plexxis
@@ -273,16 +283,16 @@ export async function generator(config: Config) {
         replaced = routeCode
           .replace(
             /(FileRoute\(\s*['"])([^\s]*)(['"],?\s*\))/g,
-            (match, p1, p2, p3) => `${p1}${escapedRoutePath}${p3}`,
+            (_, p1, __, p3) => `${p1}${escapedRoutePath}${p3}`,
           )
           .replace(
             /(import\s*\{.*)(create(Lazy)?FileRoute)(.*\}\s*from\s*['"]@tanstack\/react-router['"])/gs,
-            (match, p1, p2, p3, p4) =>
+            (_, p1, __, ___, p4) =>
               `${p1}${node.isLazy ? 'createLazyFileRoute' : 'createFileRoute'}${p4}`,
           )
           .replace(
             /create(Lazy)?FileRoute(\(\s*['"])([^\s]*)(['"],?\s*\))/g,
-            (match, p1, p2, p3, p4) =>
+            (_, __, p2, ___, p4) =>
               `${node.isLazy ? 'createLazyFileRoute' : 'createFileRoute'}${p2}${escapedRoutePath}${p4}`,
           )
       }
@@ -419,16 +429,12 @@ export async function generator(config: Config) {
     const escapedRoutePath = node.routePath?.replaceAll('$', '$$') ?? ''
 
     if (!routeCode) {
-      const replaced = `import { json } from '@tanstack/start'
-import { createAPIFileRoute } from '@tanstack/start/api'
-
-export const Route = createAPIFileRoute('${escapedRoutePath}')({
-  GET: ({ request, params }) => {
-    return json({ message: 'Hello ${escapedRoutePath}' })
-  },
-})
-
-`
+      const replaced = fillTemplate(config.customScaffolding.apiTemplate, {
+        tsrImports: "import { createAPIFileRoute } from '@tanstack/start/api';",
+        tsrPath: escapedRoutePath,
+        tsrExportStart: `export const ${CONSTANTS.APIRouteExportVariable} = createAPIFileRoute('${escapedRoutePath}')(`,
+        tsrExportEnd: ');',
+      })
 
       logger.log(`🟡 Creating ${node.fullPath}`)
       fs.writeFileSync(
@@ -544,7 +550,9 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
   }
   const routeImports = [
     ...config.routeTreeFileHeader,
-    '// This file is auto-generated by TanStack Router',
+    `// This file was automatically generated by TanStack Router.
+// You should NOT make any changes in this file as it will be overwritten.
+// Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.`,
     imports.length
       ? `import { ${imports.join(', ')} } from "@plexxis/plexxisjs-router"\n`
       : '',
@@ -849,9 +857,9 @@ export const Route = createAPIFileRoute('${escapedRoutePath}')({
   )
 }
 
-function removeTrailingUnderscores(s?: string) {
-  return s?.replaceAll(/(_$)/gi, '').replaceAll(/(_\/)/gi, '/')
-}
+// function removeTrailingUnderscores(s?: string) {
+//   return s?.replaceAll(/(_$)/gi, '').replaceAll(/(_\/)/gi, '/')
+// }
 
 function removeGroups(s: string) {
   return s.replace(possiblyNestedRouteGroupPatternRegex, '')
@@ -1136,4 +1144,13 @@ export function startAPIRouteSegmentsFromTSRFilePath(
   })
 
   return segments
+}
+
+type TemplateTag = 'tsrImports' | 'tsrPath' | 'tsrExportStart' | 'tsrExportEnd'
+
+function fillTemplate(template: string, values: Record<TemplateTag, string>) {
+  return template.replace(
+    /%%(\w+)%%/g,
+    (_, key) => values[key as TemplateTag] || '',
+  )
 }
