@@ -75,4 +75,5 @@ app.config.ts.timestamp_*
 .idea
 *.vitest-temp.json
 
+# local scripts
 *.local.sh
