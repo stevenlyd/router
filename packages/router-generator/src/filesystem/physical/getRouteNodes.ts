@@ -8,13 +8,7 @@ import {
   replaceBackslash,
   routePathToVariable,
 } from '../../utils'
-import { getRouteNodes as getRouteNodesVirtual } from '../virtual/getRouteNodes'
-import { loadConfigFile } from '../virtual/loadConfigFile'
 import { moduleBasePathId } from '../plexxis/moduleBasePathId'
-import type {
-  VirtualRootRoute,
-  VirtualRouteSubtreeConfig,
-} from '@tanstack/virtual-file-routes'
 import type { RouteNode } from '../../types'
 import type { Config } from '../../config'
 
@@ -58,48 +52,48 @@ export async function getRouteNodes(
       return true
     })
 
-    const virtualConfigFile = dirList.find((dirent) => {
-      return dirent.isFile() && dirent.name.match(/__virtual\.[mc]?[jt]s$/)
-    })
+    // const virtualConfigFile = dirList.find((dirent) => {
+    //   return dirent.isFile() && dirent.name.match(/__virtual\.[mc]?[jt]s$/)
+    // })
 
-    if (virtualConfigFile !== undefined) {
-      const virtualRouteConfigExport = await loadConfigFile(
-        path.resolve(fullDir, virtualConfigFile.name),
-      )
-      let virtualRouteSubtreeConfig: VirtualRouteSubtreeConfig
-      if (typeof virtualRouteConfigExport.default === 'function') {
-        virtualRouteSubtreeConfig = await virtualRouteConfigExport.default()
-      } else {
-        virtualRouteSubtreeConfig = virtualRouteConfigExport.default
-      }
-      const dummyRoot: VirtualRootRoute = {
-        type: 'root',
-        file: '',
-        children: virtualRouteSubtreeConfig,
-      }
-      const { routeNodes: virtualRouteNodes } = await getRouteNodesVirtual(
-        {
-          ...config,
-          routesDirectory: fullDir,
-          virtualRouteConfig: dummyRoot,
-        },
-        root,
-      )
-      virtualRouteNodes.forEach((node) => {
-        const filePath = replaceBackslash(path.join(dir, node.filePath))
-        const routePath = `/${dir}${node.routePath}`
+    // if (virtualConfigFile !== undefined) {
+    //   const virtualRouteConfigExport = await loadConfigFile(
+    //     path.resolve(fullDir, virtualConfigFile.name),
+    //   )
+    //   let virtualRouteSubtreeConfig: VirtualRouteSubtreeConfig
+    //   if (typeof virtualRouteConfigExport.default === 'function') {
+    //     virtualRouteSubtreeConfig = await virtualRouteConfigExport.default()
+    //   } else {
+    //     virtualRouteSubtreeConfig = virtualRouteConfigExport.default
+    //   }
+    //   const dummyRoot: VirtualRootRoute = {
+    //     type: 'root',
+    //     file: '',
+    //     children: virtualRouteSubtreeConfig,
+    //   }
+    //   const { routeNodes: virtualRouteNodes } = await getRouteNodesVirtual(
+    //     {
+    //       ...config,
+    //       routesDirectory: fullDir,
+    //       virtualRouteConfig: dummyRoot,
+    //     },
+    //     root,
+    //   )
+    //   virtualRouteNodes.forEach((node) => {
+    //     const filePath = replaceBackslash(path.join(dir, node.filePath))
+    //     const routePath = `/${dir}${node.routePath}`
 
-        node.variableName = routePathToVariable(
-          `${dir}/${removeExt(node.filePath)}`,
-        )
-        node.routePath = routePath
-        node.filePath = filePath
-      })
+    //     node.variableName = routePathToVariable(
+    //       `${dir}/${removeExt(node.filePath)}`,
+    //     )
+    //     node.routePath = routePath
+    //     node.filePath = filePath
+    //   })
 
-      routeNodes.push(...virtualRouteNodes)
+    //   routeNodes.push(...virtualRouteNodes)
 
-      return
-    }
+    //   return
+    // }
 
     await Promise.all(
       dirList.map(async (dirent) => {

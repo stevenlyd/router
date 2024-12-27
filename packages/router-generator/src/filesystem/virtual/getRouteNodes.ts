@@ -132,6 +132,10 @@ export async function getRouteNodesRecursive(
             routesDirectory: resolve(fullDir, node.directory),
           },
           root,
+          {
+            id: 'fake',
+            name: 'fake',
+          },
         )
         routeNodes.forEach((subtreeNode) => {
           subtreeNode.variableName = routePathToVariable(
